@@ -1,4 +1,5 @@
 from functools import partialmethod
+from typing import Any, Dict, Optional
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -82,8 +83,9 @@ class FNO(nn.Module):
           factorization and used for the forward pass
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
-    decomposition_kwargs : dict, optional, default is {}
-        Optionaly additional parameters to pass to the tensor decomposition
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
     domain_padding : None or float, optional
         If not None, percentage of padding to use, by default None
     domain_padding_mode : {'symmetric', 'one-sided'}, optional
@@ -118,7 +120,7 @@ class FNO(nn.Module):
         joint_factorization=False,
         fixed_rank_modes=False,
         implementation='factorized',
-        decomposition_kwargs=dict(),
+        decomposition_kwargs: Optional[Dict[Any, Any]] = None,
         domain_padding=None,
         domain_padding_mode='one-sided',
         fft_norm='forward',
@@ -139,7 +141,6 @@ class FNO(nn.Module):
         self.rank = rank
         self.factorization = factorization
         self.fixed_rank_modes = fixed_rank_modes
-        self.decomposition_kwargs = decomposition_kwargs
         self.fno_skip = fno_skip,
         self.mlp_skip = mlp_skip,
         self.fft_norm = fft_norm
@@ -312,8 +313,9 @@ class FNO1d(FNO):
           factorization and used for the forward pass
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
-    decomposition_kwargs : dict, optional, default is {}
-        Optionaly additional parameters to pass to the tensor decomposition
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
     domain_padding : None or float, optional
         If not None, percentage of padding to use, by default None
     domain_padding_mode : {'symmetric', 'one-sided'}, optional
@@ -350,7 +352,7 @@ class FNO1d(FNO):
         joint_factorization=False,
         fixed_rank_modes=False,
         implementation='factorized',
-        decomposition_kwargs=dict(),
+        decomposition_kwargs: Optional[Dict[Any, Any]] = None,
         domain_padding=None,
         domain_padding_mode='one-sided',
         fft_norm='forward',
@@ -462,8 +464,9 @@ class FNO2d(FNO):
           factorization and used for the forward pass
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
-    decomposition_kwargs : dict, optional, default is {}
-        Optionaly additional parameters to pass to the tensor decomposition
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
     domain_padding : None or float, optional
         If not None, percentage of padding to use, by default None
     domain_padding_mode : {'symmetric', 'one-sided'}, optional
@@ -497,7 +500,7 @@ class FNO2d(FNO):
         joint_factorization=False,
         fixed_rank_modes=False,
         implementation='factorized',
-        decomposition_kwargs=dict(),
+        decomposition_kwargs: Optional[Dict[Any, Any]] = None,
         domain_padding=None,
         domain_padding_mode='one-sided',
         fft_norm='forward',
@@ -614,8 +617,9 @@ class FNO3d(FNO):
           factorization and used for the forward pass
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
-    decomposition_kwargs : dict, optional, default is {}
-        Optionaly additional parameters to pass to the tensor decomposition
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
     domain_padding : None or float, optional
         If not None, percentage of padding to use, by default None
     domain_padding_mode : {'symmetric', 'one-sided'}, optional
@@ -649,7 +653,7 @@ class FNO3d(FNO):
                  joint_factorization=False,
                  fixed_rank_modes=False,
                  implementation='factorized',
-                 decomposition_kwargs=dict(),
+                 decomposition_kwargs: Optional[Dict[Any, Any]] = None,
                  domain_padding=None,
                  domain_padding_mode='one-sided',
                  fft_norm='forward',

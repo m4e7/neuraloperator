@@ -1,16 +1,15 @@
+from typing import Any, Dict, Optional
+
 import torch
 from torch import nn
 
+from tltorch.factorized_tensors.core import FactorizedTensor
 from torch_harmonics import RealSHT, InverseRealSHT
-
 import tensorly as tl
 from tensorly.plugins import use_opt_einsum
+
 tl.set_backend('pytorch')
-
 use_opt_einsum('optimal')
-
-from tltorch.factorized_tensors.core import FactorizedTensor
-
 einsum_symbols = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
@@ -20,19 +19,20 @@ def _contract_dense(x, weight, separable=False, dhconv=True):
     x_syms = list(einsum_symbols[:order])
 
     # in_channels, out_channels, x, y...
-    weight_syms = list(x_syms[1:]) # no batch-size
+    weight_syms = list(x_syms[1:])  # no batch-size
 
     # batch-size, out_channels, x, y...
     if separable:
         out_syms = [x_syms[0]] + list(weight_syms)
     else:
-        weight_syms.insert(1, einsum_symbols[order]) # outputs
+        weight_syms.insert(1, einsum_symbols[order])  # outputs
         out_syms = list(weight_syms)
         out_syms[0] = x_syms[0]
     if dhconv:
         weight_syms.pop()
 
-    eq= ''.join(x_syms) + ',' + ''.join(weight_syms) + '->' + ''.join(out_syms)
+    eq = ''.join(x_syms) + ',' + ''.join(weight_syms) + \
+        '->' + ''.join(out_syms)
 
     if not torch.is_tensor(weight):
         weight = weight.to_tensor()
@@ -41,11 +41,11 @@ def _contract_dense(x, weight, separable=False, dhconv=True):
 
 
 def _contract_dense_separable(x, weight, separable=True, dhconv=False):
-    if separable == False:
+    if not separable:
         raise ValueError('This function is only for separable=True')
     if dhconv:
-        return x*weight.unsqueeze(-1)
-    return x*weight
+        return x * weight.unsqueeze(-1)
+    return x * weight
 
 
 def _contract_cp(x, cp_weight, separable=False, dhconv=True):
@@ -53,21 +53,24 @@ def _contract_cp(x, cp_weight, separable=False, dhconv=True):
 
     x_syms = str(einsum_symbols[:order])
     rank_sym = einsum_symbols[order]
-    out_sym = einsum_symbols[order+1]
+    out_sym = einsum_symbols[order + 1]
     out_syms = list(x_syms)
-    
+
     if separable:
-        factor_syms = [einsum_symbols[1]+rank_sym] #in only
+        factor_syms = [einsum_symbols[1] + rank_sym]  # in only
     else:
         out_syms[1] = out_sym
-        factor_syms = [einsum_symbols[1]+rank_sym,out_sym+rank_sym] #in, out
-    
-    if dhconv:
-        factor_syms += [xs+rank_sym for xs in x_syms[2:-1]] #x, y, ...
-    else:
-        factor_syms += [xs+rank_sym for xs in x_syms[2:]] #x, y, ...
+        factor_syms = [
+            einsum_symbols[1] + rank_sym,
+            out_sym + rank_sym]  # in, out
 
-    eq = x_syms + ',' + rank_sym + ',' + ','.join(factor_syms) + '->' + ''.join(out_syms)
+    if dhconv:
+        factor_syms += [xs + rank_sym for xs in x_syms[2:-1]]  # x, y, ...
+    else:
+        factor_syms += [xs + rank_sym for xs in x_syms[2:]]  # x, y, ...
+
+    eq = x_syms + ',' + rank_sym + ',' + \
+        ','.join(factor_syms) + '->' + ''.join(out_syms)
 
     return tl.einsum(eq, x, cp_weight.weights, *cp_weight.factors)
 
@@ -79,22 +82,34 @@ def _contract_tucker(x, tucker_weight, separable=False, dhconv=False):
     out_sym = einsum_symbols[order]
     out_syms = list(x_syms)
     if separable:
-        core_syms = einsum_symbols[order+1:2*order]
+        core_syms = einsum_symbols[order + 1:2 * order]
         # factor_syms = [einsum_symbols[1]+core_syms[0]] #in only
-        factor_syms = [xs+rs for (xs, rs) in zip(x_syms[1:], core_syms)] #x, y, ...
+        # x, y, ...
+        factor_syms = [xs + rs for (xs, rs) in zip(x_syms[1:], core_syms)]
 
     elif dhconv:
-        core_syms = einsum_symbols[order+1:2*order]
+        core_syms = einsum_symbols[order + 1:2 * order]
         out_syms[1] = out_sym
-        factor_syms = [einsum_symbols[1]+core_syms[0], out_sym+core_syms[1]] #out, in
-        factor_syms += [xs+rs for (xs, rs) in zip(x_syms[2:], core_syms[2:])] #x, y, ...
+        factor_syms = [
+            einsum_symbols[1] +
+            core_syms[0],
+            out_sym +
+            core_syms[1]]  # out, in
+        # x, y, ...
+        factor_syms += [xs + rs for (xs, rs) in zip(x_syms[2:], core_syms[2:])]
     else:
-        core_syms = einsum_symbols[order+1:2*order+1]
+        core_syms = einsum_symbols[order + 1:2 * order + 1]
         out_syms[1] = out_sym
-        factor_syms = [einsum_symbols[1]+core_syms[0], out_sym+core_syms[1]] #out, in
-        factor_syms += [xs+rs for (xs, rs) in zip(x_syms[2:], core_syms[2:])] #x, y, ...
-    
-    eq = x_syms + ',' + core_syms + ',' + ','.join(factor_syms) + '->' + ''.join(out_syms)
+        factor_syms = [
+            einsum_symbols[1] +
+            core_syms[0],
+            out_sym +
+            core_syms[1]]  # out, in
+        # x, y, ...
+        factor_syms += [xs + rs for (xs, rs) in zip(x_syms[2:], core_syms[2:])]
+
+    eq = x_syms + ',' + core_syms + ',' + \
+        ','.join(factor_syms) + '->' + ''.join(out_syms)
 
     return tl.einsum(eq, x, tucker_weight.core, *tucker_weight.factors)
 
@@ -104,34 +119,35 @@ def _contract_tt(x, tt_weight, separable=False, dhconv=False):
 
     x_syms = list(einsum_symbols[:order])
     if dhconv:
-        weight_syms = list(x_syms[1:-1]) # no batch-size, no y dim
+        weight_syms = list(x_syms[1:-1])  # no batch-size, no y dim
     else:
-        weight_syms = list(x_syms[1:]) # no batch-size
+        weight_syms = list(x_syms[1:])  # no batch-size
     if not separable:
-        weight_syms.insert(1, einsum_symbols[order]) # outputs
+        weight_syms.insert(1, einsum_symbols[order])  # outputs
         out_syms = list(weight_syms)
         out_syms[0] = x_syms[0]
     else:
         out_syms = list(x_syms)
-    rank_syms = list(einsum_symbols[order+1:])
+    rank_syms = list(einsum_symbols[order + 1:])
     tt_syms = []
     for i, s in enumerate(weight_syms):
-        tt_syms.append([rank_syms[i], s, rank_syms[i+1]])
-    eq = ''.join(x_syms) + ',' + ','.join(''.join(f) for f in tt_syms) + '->' + ''.join(out_syms)
+        tt_syms.append([rank_syms[i], s, rank_syms[i + 1]])
+    eq = ''.join(x_syms) + ',' + ','.join(''.join(f)
+                                          for f in tt_syms) + '->' + ''.join(out_syms)
 
     return tl.einsum(eq, x, *tt_weight.factors)
 
 
 def get_contract_fun(weight, implementation='reconstructed', separable=False):
     """Generic ND implementation of Fourier Spectral Conv contraction
-    
+
     Parameters
     ----------
     weight : tensorly-torch's FactorizedTensor
     implementation : {'reconstructed', 'factorized'}, default is 'reconstructed'
         whether to reconstruct the weight and do a forward pass (reconstructed)
         or contract directly the factors of the factorized weight with the input (factorized)
-    
+
     Returns
     -------
     function : (x, weight) -> x * weight in Fourier space
@@ -155,19 +171,36 @@ def get_contract_fun(weight, implementation='reconstructed', separable=False):
             elif weight.name.lower().endswith('cp'):
                 return _contract_cp
             else:
-                raise ValueError(f'Got unexpected factorized weight type {weight.name}')
+                raise ValueError(
+                    f'Got unexpected factorized weight type {weight.name}')
         else:
-            raise ValueError(f'Got unexpected weight type of class {weight.__class__.__name__}')
+            raise ValueError(
+                f'Got unexpected weight type of class {weight.__class__.__name__}')
     else:
-        raise ValueError(f'Got {implementation=}, expected "reconstructed" or "factorized"')
+        raise ValueError(
+            f'Got {implementation=}, expected "reconstructed" or "factorized"')
 
 
 class SphericalConv(nn.Module):
-    def __init__(self, in_channels, out_channels, n_modes, incremental_n_modes=None, bias=True,
-                 n_layers=1, separable=False, output_scaling_factor=None, fno_block_precision='full',
-                 rank=0.5, factorization='cp', implementation='reconstructed', 
-                 fixed_rank_modes=False, joint_factorization=False, decomposition_kwargs=dict(),
-                 init_std='auto', fft_norm='backward'):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            n_modes,
+            incremental_n_modes=None,
+            bias=True,
+            n_layers=1,
+            separable=False,
+            output_scaling_factor=None,
+            fno_block_precision='full',
+            rank=0.5,
+            factorization='cp',
+            implementation='reconstructed',
+            fixed_rank_modes=False,
+            joint_factorization=False,
+            decomposition_kwargs: Optional[Dict[Any, Any]] = None,
+            init_std='auto',
+            fft_norm='backward'):
         super().__init__()
 
         self.in_channels = in_channels
@@ -176,20 +209,22 @@ class SphericalConv(nn.Module):
 
         # We index quadrands only
         # n_modes is the total number of modes kept along each dimension
-        # half_n_modes is half of that except in the last mode, correponding to the number of modes to keep in *each* quadrant for each dim
+        # half_n_modes is half of that except in the last mode, correponding to
+        # the number of modes to keep in *each* quadrant for each dim
         if isinstance(n_modes, int):
             n_modes = [n_modes]
         self.n_modes = n_modes
         self.order = len(n_modes)
 
         half_total_n_modes = list(n_modes)
-        half_total_n_modes[-1] = half_total_n_modes[-1]//2
+        half_total_n_modes[-1] = half_total_n_modes[-1] // 2
         self.half_total_n_modes = half_total_n_modes
 
         # WE use half_total_n_modes to build the full weights
         # During training we can adjust incremental_n_modes which will also
-        # update half_n_modes 
-        # So that we can train on a smaller part of the Fourier modes and total weights
+        # update half_n_modes
+        # So that we can train on a smaller part of the Fourier modes and total
+        # weights
         self.incremental_n_modes = incremental_n_modes
 
         self.rank = rank
@@ -199,7 +234,8 @@ class SphericalConv(nn.Module):
 
         if output_scaling_factor is not None:
             if isinstance(output_scaling_factor, (float, int)):
-                output_scaling_factor = [float(output_scaling_factor)]*len(self.n_modes)
+                output_scaling_factor = [
+                    float(output_scaling_factor)] * len(self.n_modes)
         self.output_scaling_factor = output_scaling_factor
 
         if init_std == 'auto':
@@ -210,46 +246,61 @@ class SphericalConv(nn.Module):
         if isinstance(fixed_rank_modes, bool):
             if fixed_rank_modes:
                 # If bool, keep the number of layers fixed
-                fixed_rank_modes=[0]
+                fixed_rank_modes = [0]
             else:
-                fixed_rank_modes=None
+                fixed_rank_modes = None
 
-        # Make sure we are using a Complex Factorized Tensor to parametrize the conv
+        # Make sure we are using a Complex Factorized Tensor to parametrize the
+        # conv
         if factorization is None:
-            factorization = 'Dense' # No factorization
+            factorization = 'Dense'  # No factorization
         if not factorization.lower().startswith('complex'):
             factorization = f'Complex{factorization}'
 
         if separable:
             if in_channels != out_channels:
-                raise ValueError('To use separable Fourier Conv, in_channels must be equal to out_channels, ',
-                                 f'but got {in_channels=} and {out_channels=}')
+                raise ValueError(
+                    'To use separable Fourier Conv, in_channels must be equal to out_channels, ',
+                    f'but got {in_channels=} and {out_channels=}')
             weight_shape = (in_channels, *half_total_n_modes[:-1])
         else:
-            weight_shape = (in_channels, out_channels, *half_total_n_modes[:-1])
+            weight_shape = (in_channels, out_channels,
+                            *half_total_n_modes[:-1])
         self.separable = separable
 
+        if decomposition_kwargs is None:
+            decomposition_kwargs = {}
         if joint_factorization:
-            self.weight = FactorizedTensor.new((self.n_layers, *weight_shape),
-                                                rank=self.rank, factorization=factorization, 
-                                                fixed_rank_modes=fixed_rank_modes,
-                                                **decomposition_kwargs)
+            self.weight = FactorizedTensor.new(
+                (self.n_layers,
+                 *weight_shape),
+                rank=self.rank,
+                factorization=factorization,
+                fixed_rank_modes=fixed_rank_modes,
+                **decomposition_kwargs)
             self.weight.normal_(0, init_std)
         else:
             self.weight = nn.ModuleList([
-                 FactorizedTensor.new(
+                FactorizedTensor.new(
                     weight_shape,
-                    rank=self.rank, factorization=factorization, 
+                    rank=self.rank,
+                    factorization=factorization,
                     fixed_rank_modes=fixed_rank_modes,
                     **decomposition_kwargs
-                    ) for _ in range(n_layers)]
-                )
+                ) for _ in range(n_layers)]
+            )
             for w in self.weight:
                 w.normal_(0, init_std)
-        self._contract = get_contract_fun(self.weight[0], implementation=implementation, separable=separable)
+
+        self._contract = get_contract_fun(
+            self.weight[0],
+            implementation=implementation,
+            separable=separable)
 
         if bias:
-            self.bias = nn.Parameter(init_std * torch.randn(*((n_layers, self.out_channels) + (1, )*self.order)))
+            self.bias = nn.Parameter(
+                init_std * torch.randn(
+                    *((n_layers, self.out_channels) + (1, ) * self.order)))
         else:
             self.bias = None
 
@@ -273,14 +324,26 @@ class SphericalConv(nn.Module):
 
         key_sht = f'{height}_{width}_{projection_sht}'
         key_isht = f'{height}_{width}_{projection_isht}'
-    
-        try: 
+
+        try:
             return self._shts[key_sht], self._ishts[key_isht]
         except KeyError:
-            sht = RealSHT(nlat=height, nlon=width, lmax=self.half_total_n_modes[0], mmax=self.half_total_n_modes[1], 
-                          grid=projection_sht).to(device=self.bias.device).to(dtype=torch.float32)
-            isht = InverseRealSHT(nlat=height, nlon=width, lmax=self.half_total_n_modes[0], mmax=self.half_total_n_modes[1],
-                                  grid=projection_isht).to(device=self.bias.device).to(dtype=torch.float32)
+            sht = RealSHT(
+                nlat=height,
+                nlon=width,
+                lmax=self.half_total_n_modes[0],
+                mmax=self.half_total_n_modes[1],
+                grid=projection_sht).to(
+                device=self.bias.device).to(
+                dtype=torch.float32)
+            isht = InverseRealSHT(
+                nlat=height,
+                nlon=width,
+                lmax=self.half_total_n_modes[0],
+                mmax=self.half_total_n_modes[1],
+                grid=projection_isht).to(
+                device=self.bias.device).to(
+                dtype=torch.float32)
             self._shts[key_sht] = sht
             self._ishts[key_isht] = isht
             return sht, isht
@@ -299,18 +362,21 @@ class SphericalConv(nn.Module):
     def incremental_n_modes(self, incremental_n_modes):
         if incremental_n_modes is None:
             self._incremental_n_modes = None
-            self.half_n_modes = [m//2 for m in self.n_modes]
+            self.half_n_modes = [m // 2 for m in self.n_modes]
 
         else:
             if isinstance(incremental_n_modes, int):
-                self._incremental_n_modes = [incremental_n_modes]*len(self.n_modes)
+                self._incremental_n_modes = [
+                    incremental_n_modes] * len(self.n_modes)
             else:
                 if len(incremental_n_modes) == len(self.n_modes):
                     self._incremental_n_modes = incremental_n_modes
                 else:
-                    raise ValueError(f'Provided {incremental_n_modes} for actual n_modes={self.n_modes}.')
-            self.weight_slices = [slice(None)]*2 + [slice(None, n//2) for n in self._incremental_n_modes]
-            self.half_n_modes = [m//2 for m in self._incremental_n_modes]
+                    raise ValueError(
+                        f'Provided {incremental_n_modes} for actual n_modes={self.n_modes}.')
+            self.weight_slices = [
+                slice(None)] * 2 + [slice(None, n // 2) for n in self._incremental_n_modes]
+            self.half_n_modes = [m // 2 for m in self._incremental_n_modes]
 
     def forward(self, x, indices=0, output_shape=None):
         """Generic forward pass for the Factorized Spectral Conv
@@ -329,24 +395,29 @@ class SphericalConv(nn.Module):
         batchsize, channels, height, width = x.shape
 
         if self.output_scaling_factor is not None and output_shape is None:
-            height = int(round(height*self.output_scaling_factor[0]))
-            width = int(round(width*self.output_scaling_factor[1]))
+            height = int(round(height * self.output_scaling_factor[0]))
+            width = int(round(width * self.output_scaling_factor[1]))
         elif output_shape is not None:
             height, width = output_shape[0], output_shape[1]
 
-
         sht, isht = self._get_sht(height, width)
-        
+
         out_fft = sht(x)
-    
+
         # xp = torch.zeros_like(x)
         # xp[..., :self.modes_lat_local, :self.modes_lon_local] = self._contract(x[..., :self.modes_lat_local, :self.modes_lon_local],
-        #                                                                        self.weight, separable=self.separable, operator_type=self.operator_type)
+        # self.weight, separable=self.separable,
+        # operator_type=self.operator_type)
 
         # upper block (truncate high freq)
-        out_fft = self._contract(out_fft[:, :, :self.half_total_n_modes[0], :self.half_total_n_modes[1]], 
-                                 self._get_weight(indices), separable=self.separable, dhconv=True)
-        
+        out_fft = self._contract(out_fft[:,
+                                         :,
+                                         :self.half_total_n_modes[0],
+                                         :self.half_total_n_modes[1]],
+                                 self._get_weight(indices),
+                                 separable=self.separable,
+                                 dhconv=True)
+
         x = isht(out_fft)
 
         if self.bias is not None:
@@ -360,10 +431,11 @@ class SphericalConv(nn.Module):
         The parametrization of sub-convolutional layers is shared with the main one.
         """
         if self.n_layers == 1:
-            raise ValueError('A single convolution is parametrized, directly use the main class.')
-        
+            raise ValueError(
+                'A single convolution is parametrized, directly use the main class.')
+
         return SubConv(self, indices)
-    
+
     def __getitem__(self, indices):
         return self.get_conv(indices)
 
@@ -374,13 +446,14 @@ class SubConv(nn.Module):
     Notes
     -----
     This relies on the fact that nn.Parameters are not duplicated:
-    if the same nn.Parameter is assigned to multiple modules, they all point to the same data, 
+    if the same nn.Parameter is assigned to multiple modules, they all point to the same data,
     which is shared.
     """
+
     def __init__(self, main_conv, indices):
         super().__init__()
         self.main_conv = main_conv
         self.indices = indices
-    
+
     def forward(self, x):
         return self.main_conv.forward(x, self.indices)

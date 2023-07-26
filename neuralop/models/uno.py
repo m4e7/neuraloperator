@@ -1,3 +1,5 @@
+from typing import Any, Dict, Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -77,8 +79,9 @@ class UNO(nn.Module):
         If factorization is not None, forward mode to use::
         * `reconstructed` : the full weight tensor is reconstructed from the factorization and used for the forward pass
         * `factorized` : the input is directly contracted with the factors of the decomposition
-    decomposition_kwargs : dict, optional, default is {}
-        Optionaly additional parameters to pass to the tensor decomposition
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
     domain_padding : None or float, optional
         If not None, percentage of padding to use, by default None
     domain_padding_mode : {'symmetric', 'one-sided'}, optional
@@ -116,7 +119,7 @@ class UNO(nn.Module):
                  integral_operator=SpectralConv,
                  operator_block=FNOBlocks,
                  implementation='factorized',
-                 decomposition_kwargs=dict(),
+                 decomposition_kwargs: Optional[Dict[Any, Any]] = None,
                  domain_padding=None,
                  domain_padding_mode='one-sided',
                  fft_norm='forward',
@@ -150,9 +153,8 @@ class UNO(nn.Module):
         self.rank = rank
         self.factorization = factorization
         self.fixed_rank_modes = fixed_rank_modes
-        self.decomposition_kwargs = decomposition_kwargs
-        self.fno_skip = fno_skip,
-        self.mlp_skip = mlp_skip,
+        self.fno_skip = fno_skip
+        self.mlp_skip = mlp_skip
         self.fft_norm = fft_norm
         self.implementation = implementation
         self.separable = separable

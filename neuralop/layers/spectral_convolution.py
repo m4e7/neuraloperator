@@ -1,5 +1,5 @@
 import itertools
-from typing import Callable, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
@@ -246,9 +246,10 @@ class SpectralConv(nn.Module):
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
         Ignored if ``factorization is None``
-    decomposition_kwargs : dict, optional, default is {}
-        Optionally additional parameters to pass to the tensor decomposition
-        Ignored if ``factorization is None``
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
+        Ignored if ``factorization is None``.
     kwargs :  Dict[str, Any], optional
         Args to pass to connections (ex. ``Conv`` in case of "linear", etc).
         Args include ``"device"``, ``"dtype"``.
@@ -270,7 +271,7 @@ class SpectralConv(nn.Module):
             implementation='reconstructed',
             fixed_rank_modes=False,
             joint_factorization=False,
-            decomposition_kwargs: Optional[dict] = None,
+            decomposition_kwargs: Optional[Dict[Any, Any]] = None,
             init_std: Union[float, Literal['auto']] = 'auto',
             fft_norm='backward',
             **kwargs,
@@ -349,26 +350,23 @@ class SpectralConv(nn.Module):
                 *half_total_n_modes
             )
         self.separable = separable
-
         self.n_weights_per_layer = 2**(self.order - 1)
-        tensor_kwargs = (decomposition_kwargs
-                         if decomposition_kwargs is not None
-                         else {})
-        weights_dtype = (torch.cdouble
-                         if self.fno_block_precision == 'double'
-                         else torch.cfloat)
+
+        if decomposition_kwargs is None:
+            decomposition_kwargs = {}
+        if 'dtype' not in decomposition_kwargs:
+            decomposition_kwargs['dtype'] = (
+                torch.cdouble
+                if self.fno_block_precision == 'double'
+                else torch.cfloat)
+
         if joint_factorization:
             self.weight = FactorizedTensor.new(
-                (self.n_weights_per_layer * n_layers,
-                 *weight_shape),
+                (self.n_weights_per_layer * n_layers, *weight_shape),
                 rank=self.rank,
                 factorization=factorization,
                 fixed_rank_modes=fixed_rank_modes,
-                # FIXME I don't trust that mutable dicts aren't passed
-                # to ``decomposition_kwargs`` somewhere, so I can't add
-                # key "dtype" to ``kwargs`` below.
-                dtype=weights_dtype,
-                **tensor_kwargs)
+                **decomposition_kwargs)
             self.weight.normal_(0, init_std)
         else:
             self.weight = nn.ModuleList([
@@ -377,11 +375,7 @@ class SpectralConv(nn.Module):
                     rank=self.rank,
                     factorization=factorization,
                     fixed_rank_modes=fixed_rank_modes,
-                    # FIXME I don't trust that mutable dicts aren't passed
-                    # to ``decomposition_kwargs`` somewhere, so I can't add
-                    # key "dtype" to ``kwargs`` below.
-                    dtype=weights_dtype,
-                    **tensor_kwargs
+                    **decomposition_kwargs
                 ) for _ in range(self.n_weights_per_layer * n_layers)]
             )
             for w in self.weight:

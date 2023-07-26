@@ -11,8 +11,8 @@ def load_darcy_flow_small(
     n_tests,
     batch_size,
     test_batch_sizes,
-    test_resolutions=[16, 32],
-    grid_boundaries=[[0, 1], [0, 1]],
+    test_resolutions=(16, 32),
+    grid_boundaries=((0, 1), (0, 1)),
     positional_encoding=True,
     encode_input=False,
     encode_output=True,
@@ -31,8 +31,8 @@ def load_darcy_flow_small(
     n_tests : int
     batch_size : int
     test_batch_sizes : int list
-    test_resolutions : int list, default is [16, 32],
-    grid_boundaries : int list, default is [[0,1],[0,1]],
+    test_resolutions : int tuple, default is (16, 32),
+    grid_boundaries : int tuple, default is ((0, 1), (0, 1)),
     positional_encoding : bool, default is True
     encode_input : bool, default is False
     encode_output : bool, default is True
@@ -73,9 +73,9 @@ def load_darcy_flow_small(
 def load_darcy_pt(data_path,
                   n_train, n_tests,
                   batch_size, test_batch_sizes,
-                  test_resolutions=[32],
+                  test_resolutions=(32,),
                   train_resolution=32,
-                  grid_boundaries=[[0, 1], [0, 1]],
+                  grid_boundaries=((0, 1), (0, 1)),
                   positional_encoding=True,
                   encode_input=False,
                   encode_output=True,

@@ -1,11 +1,14 @@
+from typing import Any, Dict, Optional
+
+import torch
 from torch import nn
 import torch.nn.functional as F
-import torch
-from .spectral_convolution import SpectralConv, PrecisionEnum
-from .skip_connections import skip_connection
-from .resample import resample
+
 from .mlp import MLP
 from .normalization_layers import AdaIN
+from .resample import resample
+from .skip_connections import skip_connection
+from .spectral_convolution import SpectralConv, PrecisionEnum
 
 
 class FNOBlocks(nn.Module):
@@ -35,7 +38,7 @@ class FNOBlocks(nn.Module):
         joint_factorization=False,
         fixed_rank_modes=False,
         implementation='factorized',
-        decomposition_kwargs=dict(),
+        decomposition_kwargs: Optional[Dict[Any, Any]] = None,
         fft_norm='forward',
         **kwargs,
     ):
@@ -66,7 +69,6 @@ class FNOBlocks(nn.Module):
         self.rank = rank
         self.factorization = factorization
         self.fixed_rank_modes = fixed_rank_modes
-        self.decomposition_kwargs = decomposition_kwargs
         self.fno_skip = fno_skip
         self.mlp_skip = mlp_skip
         self.use_mlp = use_mlp

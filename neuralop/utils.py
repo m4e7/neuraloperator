@@ -2,9 +2,9 @@ import torch
 
 import wandb
 
-# normalization, pointwise gaussian
 class UnitGaussianNormalizer:
-    def __init__(self, x, eps=0.00001, reduce_dim=[0], verbose=True):
+    """Point-wise Gaussian normalization."""
+    def __init__(self, x, eps=0.00001, reduce_dim=(0,), verbose=True):
         super().__init__()
         n_samples, *shape = x.shape
         self.sample_shape = shape
