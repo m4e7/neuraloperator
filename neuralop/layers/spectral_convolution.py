@@ -387,7 +387,10 @@ class SpectralConv(nn.Module):
 
         if bias:
             self.bias = nn.Parameter(
-                init_std * torch.randn(*((n_layers, self.out_channels) + (1, ) * self.order)))
+                init_std * torch.randn(
+                    *((n_layers, self.out_channels) + (1, ) * self.order)
+                )
+            )
         else:
             self.bias = None
 
@@ -600,14 +603,14 @@ class SpectralConv2d(SpectralConv):
     implementation
     """
     def forward(self, x, indices=0):
-        batchsize, channels, height, width = x.shape
+        batch_size, channels, height, width = x.shape
 
         x = torch.fft.rfft2(x.float(), norm=self.fft_norm)
 
         # The output will be of size (batch_size, self.out_channels,
         # x.size(-2), x.size(-1)//2 + 1)
         out_fft = torch.zeros(
-            [batchsize, self.out_channels, height, width // 2 + 1],
+            [batch_size, self.out_channels, height, width // 2 + 1],
             dtype=x.dtype,
             device=x.device)
 
@@ -635,6 +638,7 @@ class SpectralConv2d(SpectralConv):
             width = round(width * self.output_scaling_factor[indices][0])
             height = round(height * self.output_scaling_factor[indices][1])
 
+        # Return to physical space:
         x = torch.fft.irfft2(out_fft,
                              s=(height, width),
                              dim=(-2, -1),
