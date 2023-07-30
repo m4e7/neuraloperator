@@ -11,7 +11,7 @@ class H5pyDataset(Dataset):
         try:
             subsample_step = resolution_to_step[resolution]
         except KeyError:
-            raise ValueError(f'Got {resolution=}, expected one of {resolution_to_step.keys()}')
+            raise ValueError(f'Got resolution={resolution}, expected one of {resolution_to_step.keys()}')
 
         self.subsample_step = subsample_step
         self.data_path = data_path
