@@ -45,7 +45,7 @@ def _contract_dense(x, weight, separable=False):
         # if x is half precision, run a specialized einsum
         return einsum_complexhalf(eq, x, weight)
     else:
-        return tl.einsum(eq, x, weight)
+        return tl.backend.einsum(eq, x, weight)
 
 
 def _contract_dense_separable(x, weight, separable=True):
