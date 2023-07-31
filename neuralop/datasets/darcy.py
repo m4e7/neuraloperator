@@ -1,5 +1,5 @@
-import torch
 from pathlib import Path
+import torch
 
 from ..utils import UnitGaussianNormalizer
 from .tensor_dataset import TensorDataset
@@ -11,8 +11,8 @@ def load_darcy_flow_small(
     n_tests,
     batch_size,
     test_batch_sizes,
-    test_resolutions=[16, 32],
-    grid_boundaries=[[0, 1], [0, 1]],
+    test_resolutions=None,
+    grid_boundaries=((0, 1), (0, 1)),
     positional_encoding=True,
     encode_input=False,
     encode_output=True,
@@ -31,8 +31,9 @@ def load_darcy_flow_small(
     n_tests : int
     batch_size : int
     test_batch_sizes : int list
-    test_resolutions : int list, default is [16, 32],
-    grid_boundaries : int list, default is [[0,1],[0,1]],
+    test_resolutions : int list, optional, default is ``None``,
+        If ``None``, will safely infer a default of ``[16, 32]``.
+    grid_boundaries : int tuple, default is ((0, 1), (0, 1)),
     positional_encoding : bool, default is True
     encode_input : bool, default is False
     encode_output : bool, default is True
@@ -42,17 +43,20 @@ def load_darcy_flow_small(
 
     Returns
     -------
-    training_dataloader, testing_dataloaders
+    training_dataloader, testing_dataloaders, output_encoder
 
     training_dataloader : torch DataLoader
     testing_dataloaders : Dict[int, DataLoader]
       Keys are the resolution scales (i.e. same as the entries in
       ``test_resolutions``
     """
+    if test_resolutions is None:
+        test_resolutions = [16, 32]
     for res in test_resolutions:
         if res not in [16, 32]:
             raise ValueError(
-                f'Only 32 and 64 are supported for test resolution, but got {test_resolutions=}')
+                'Only 32 and 64 are supported for test resolution, ' +
+                'but got test_resolutions={test_resolutions}')
     path = Path(__file__).resolve().parent.joinpath('data')
     return load_darcy_pt(
         str(path),
@@ -71,11 +75,13 @@ def load_darcy_flow_small(
 
 
 def load_darcy_pt(data_path,
-                  n_train, n_tests,
-                  batch_size, test_batch_sizes,
-                  test_resolutions=[32],
+                  n_train,
+                  n_tests,
+                  batch_size,
+                  test_batch_sizes,
+                  test_resolutions=None,
                   train_resolution=32,
-                  grid_boundaries=[[0, 1], [0, 1]],
+                  grid_boundaries=((0, 1), (0, 1)),
                   positional_encoding=True,
                   encode_input=False,
                   encode_output=True,
@@ -84,20 +90,28 @@ def load_darcy_pt(data_path,
     """Load the Navier-Stokes dataset."""
     data = torch.load(Path(data_path).joinpath(
         f'darcy_train_{train_resolution}.pt').as_posix())
-    x_train = data['x'][0:n_train, :, :].unsqueeze(
-        channel_dim).type(torch.float32).clone()
+    x_train = data['x'][0:n_train, :, :]\
+        .unsqueeze(channel_dim)\
+        .type(torch.float32)\
+        .clone()
     y_train = data['y'][0:n_train, :, :].unsqueeze(channel_dim).clone()
     del data
 
+    if test_resolutions is None:
+        test_resolutions = [32]
     idx = test_resolutions.index(train_resolution)
     test_resolutions.pop(idx)
     n_test = n_tests.pop(idx)
     test_batch_size = test_batch_sizes.pop(idx)
 
-    data = torch.load(Path(data_path).joinpath(
-        f'darcy_test_{train_resolution}.pt').as_posix())
-    x_test = data['x'][:n_test, :, :].unsqueeze(
-        channel_dim).type(torch.float32).clone()
+    data = torch.load(
+        Path(data_path)
+            .joinpath(f'darcy_test_{train_resolution}.pt')
+            .as_posix())
+    x_test = data['x'][:n_test, :, :]\
+        .unsqueeze(channel_dim)\
+        .type(torch.float32)\
+        .clone()
     y_test = data['y'][:n_test, :, :].unsqueeze(channel_dim).clone()
     del data
 
@@ -107,7 +121,8 @@ def load_darcy_pt(data_path,
         elif encoding == 'pixel-wise':
             reduce_dims = [0]
 
-        input_encoder = UnitGaussianNormalizer(x_train, reduce_dim=reduce_dims)
+        input_encoder = UnitGaussianNormalizer(
+            x_train, reduce_dim=reduce_dims, verbose=False)
         x_train = input_encoder.encode(x_train)
         x_test = input_encoder.encode(x_test.contiguous())
     else:
@@ -120,7 +135,7 @@ def load_darcy_pt(data_path,
             reduce_dims = [0]
 
         output_encoder = UnitGaussianNormalizer(
-            y_train, reduce_dim=reduce_dims)
+            y_train, reduce_dim=reduce_dims, verbose=False)
         y_train = output_encoder.encode(y_train)
     else:
         output_encoder = None
@@ -128,9 +143,9 @@ def load_darcy_pt(data_path,
     train_db = TensorDataset(
         x_train,
         y_train,
-        transform_x=PositionalEmbedding(
-            grid_boundaries,
-            0) if positional_encoding else None)
+        transform_x=(PositionalEmbedding(grid_boundaries,0)
+                     if positional_encoding
+                     else None))
     train_loader = torch.utils.data.DataLoader(
         train_db,
         batch_size=batch_size,
@@ -142,9 +157,9 @@ def load_darcy_pt(data_path,
     test_db = TensorDataset(
         x_test,
         y_test,
-        transform_x=PositionalEmbedding(
-            grid_boundaries,
-            0) if positional_encoding else None)
+        transform_x=(PositionalEmbedding(grid_boundaries,0)
+                     if positional_encoding
+                     else None))
     test_loader = torch.utils.data.DataLoader(
         test_db,
         batch_size=test_batch_size,
@@ -160,20 +175,25 @@ def load_darcy_pt(data_path,
             test_resolutions,
             n_tests,
             test_batch_sizes):
-        print(
-            f'Loading test db at resolution {res} with {n_test} samples and batch-size={test_batch_size}')
+        print(f'Loading test db at resolution {res} with {n_test} samples ' +
+              f'and batch-size={test_batch_size}')
         data = torch.load(Path(data_path).joinpath(
             f'darcy_test_{res}.pt').as_posix())
-        x_test = data['x'][:n_test, :, :].unsqueeze(
-            channel_dim).type(torch.float32).clone()
+        x_test = data['x'][:n_test, :, :]\
+            .unsqueeze(channel_dim)\
+            .type(torch.float32)\
+            .clone()
         y_test = data['y'][:n_test, :, :].unsqueeze(channel_dim).clone()
         del data
         if input_encoder is not None:
             x_test = input_encoder.encode(x_test)
 
         test_db = TensorDataset(
-            x_test, y_test, transform_x=PositionalEmbedding(
-                grid_boundaries, 0) if positional_encoding else None)
+            x_test,
+            y_test,
+            transform_x=(PositionalEmbedding(grid_boundaries, 0)
+                         if positional_encoding
+                         else None))
         test_loader = torch.utils.data.DataLoader(
             test_db,
             batch_size=test_batch_size,

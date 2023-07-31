@@ -5,18 +5,19 @@ from .tensor_dataset import GeneralTensorDataset
 from .transforms import PositionalEmbedding
 
 
-def load_pt_traintestsplit(data_path, 
-                        n_train, n_test,
-                        batch_size, test_batch_size,
-                        labels='x',
-                        grid_boundaries=[[0,1],[0,1]],
-                        positional_encoding=True,
-                        gaussian_norm=False,
-                        norm_type='channel-wise', 
-                        channel_dim=1,
-                        subsample_fact=None,
-                        interp_res=None
-                        ):
+def load_pt_traintestsplit(
+    data_path,
+    n_train, n_test,
+    batch_size, test_batch_size,
+    labels='x',
+    grid_boundaries=((0, 1), (0, 1)),
+    positional_encoding=True,
+    gaussian_norm=False,
+    norm_type='channel-wise',
+    channel_dim=1,
+    subsample_fact=None,
+    interp_res=None
+):
     """Create train-test split from a single file
     containing any number of tensors. n_train or
     n_test can be zero. First n_train
@@ -39,7 +40,8 @@ def load_pt_traintestsplit(data_path,
     gaussian_norm : bool list, default is False
     norm_type : str, default is 'channel-wise'
     channel_dim : int list, default is 1
-        where to put the channel dimension, defaults size is batch, channel, height, width
+        where to put the channel dimension,
+        defaults size is batch, channel, height, width
     subsample_fact : list, default is None
     interp_res : list, default is None
 

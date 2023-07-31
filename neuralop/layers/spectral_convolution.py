@@ -1,5 +1,9 @@
 import itertools
-from typing import Callable, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 import torch
 from torch import nn
@@ -41,7 +45,7 @@ def _contract_dense(x, weight, separable=False):
         # if x is half precision, run a specialized einsum
         return einsum_complexhalf(eq, x, weight)
     else:
-        return tl.einsum(eq, x, weight)
+        return tl.backend.einsum(eq, x, weight)
 
 
 def _contract_dense_separable(x, weight, separable=True):
@@ -173,7 +177,7 @@ def get_contract_fun(weight, implementation='reconstructed', separable=False):
                 f'Got unexpected weight type of class {weight.__class__.__name__}')
     else:
         raise ValueError(
-            f'Got {implementation=}, expected "reconstructed" or "factorized"')
+            f'Got implementation={implementation}, expected "reconstructed" or "factorized"')
 
 
 IntBoundary = Tuple[Optional[int], Optional[int]]
@@ -246,9 +250,10 @@ class SpectralConv(nn.Module):
         * `factorized` : the input is directly contracted with the factors of
           the decomposition
         Ignored if ``factorization is None``
-    decomposition_kwargs : dict, optional, default is {}
-        Optionally additional parameters to pass to the tensor decomposition
-        Ignored if ``factorization is None``
+    decomposition_kwargs : dict, optional, default is ``None``
+        Optionally additional parameters to pass to the tensor decomposition.
+        If ``None``, infer an empty dict ``{}``.
+        Ignored if ``factorization is None``.
     kwargs :  Dict[str, Any], optional
         Args to pass to connections (ex. ``Conv`` in case of "linear", etc).
         Args include ``"device"``, ``"dtype"``.
@@ -270,10 +275,10 @@ class SpectralConv(nn.Module):
             implementation='reconstructed',
             fixed_rank_modes=False,
             joint_factorization=False,
-            decomposition_kwargs: Optional[dict] = None,
+            decomposition_kwargs: Optional[Dict[Any, Any]] = None,
             init_std: Union[float, Literal['auto']] = 'auto',
             fft_norm='backward',
-            **kwargs,
+            **_kwargs,
     ):
         super().__init__()
 
@@ -340,7 +345,7 @@ class SpectralConv(nn.Module):
             if in_channels != out_channels:
                 raise ValueError(
                     'To use separable Fourier Conv, in_channels must be equal to out_channels, ',
-                    f'but got {in_channels=} and {out_channels=}')
+                    f'but got in_channels={in_channels} and out_channels={out_channels}')
             weight_shape: Tuple[int, ...] = (in_channels, *half_total_n_modes)
         else:
             weight_shape: Tuple[int, ...] = (
@@ -349,26 +354,23 @@ class SpectralConv(nn.Module):
                 *half_total_n_modes
             )
         self.separable = separable
-
         self.n_weights_per_layer = 2**(self.order - 1)
-        tensor_kwargs = (decomposition_kwargs
-                         if decomposition_kwargs is not None
-                         else {})
-        weights_dtype = (torch.cdouble
-                         if self.fno_block_precision == 'double'
-                         else torch.cfloat)
+
+        if decomposition_kwargs is None:
+            decomposition_kwargs = {}
+        if 'dtype' not in decomposition_kwargs:
+            decomposition_kwargs['dtype'] = (
+                torch.cdouble
+                if self.fno_block_precision == 'double'
+                else torch.cfloat)
+
         if joint_factorization:
             self.weight = FactorizedTensor.new(
-                (self.n_weights_per_layer * n_layers,
-                 *weight_shape),
+                (self.n_weights_per_layer * n_layers, *weight_shape),
                 rank=self.rank,
                 factorization=factorization,
                 fixed_rank_modes=fixed_rank_modes,
-                # FIXME I don't trust that mutable dicts aren't passed
-                # to ``decomposition_kwargs`` somewhere, so I can't add
-                # key "dtype" to ``kwargs`` below.
-                dtype=weights_dtype,
-                **tensor_kwargs)
+                **decomposition_kwargs)
             self.weight.normal_(0, init_std)
         else:
             self.weight = nn.ModuleList([
@@ -377,11 +379,7 @@ class SpectralConv(nn.Module):
                     rank=self.rank,
                     factorization=factorization,
                     fixed_rank_modes=fixed_rank_modes,
-                    # FIXME I don't trust that mutable dicts aren't passed
-                    # to ``decomposition_kwargs`` somewhere, so I can't add
-                    # key "dtype" to ``kwargs`` below.
-                    dtype=weights_dtype,
-                    **tensor_kwargs
+                    **decomposition_kwargs
                 ) for _ in range(self.n_weights_per_layer * n_layers)]
             )
             for w in self.weight:
@@ -393,7 +391,10 @@ class SpectralConv(nn.Module):
 
         if bias:
             self.bias = nn.Parameter(
-                init_std * torch.randn(*((n_layers, self.out_channels) + (1, ) * self.order)))
+                init_std * torch.randn(
+                    *((n_layers, self.out_channels) + (1, ) * self.order)
+                )
+            )
         else:
             self.bias = None
 
@@ -606,14 +607,14 @@ class SpectralConv2d(SpectralConv):
     implementation
     """
     def forward(self, x, indices=0):
-        batchsize, channels, height, width = x.shape
+        batch_size, channels, height, width = x.shape
 
         x = torch.fft.rfft2(x.float(), norm=self.fft_norm)
 
         # The output will be of size (batch_size, self.out_channels,
         # x.size(-2), x.size(-1)//2 + 1)
         out_fft = torch.zeros(
-            [batchsize, self.out_channels, height, width // 2 + 1],
+            [batch_size, self.out_channels, height, width // 2 + 1],
             dtype=x.dtype,
             device=x.device)
 
@@ -641,6 +642,7 @@ class SpectralConv2d(SpectralConv):
             width = round(width * self.output_scaling_factor[indices][0])
             height = round(height * self.output_scaling_factor[indices][1])
 
+        # Return to physical space:
         x = torch.fft.irfft2(out_fft,
                              s=(height, width),
                              dim=(-2, -1),
