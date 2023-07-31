@@ -1,5 +1,9 @@
 import itertools
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 import torch
 from torch import nn
@@ -274,7 +278,7 @@ class SpectralConv(nn.Module):
             decomposition_kwargs: Optional[Dict[Any, Any]] = None,
             init_std: Union[float, Literal['auto']] = 'auto',
             fft_norm='backward',
-            **kwargs,
+            **_kwargs,
     ):
         super().__init__()
 
