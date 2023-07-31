@@ -51,9 +51,11 @@ class DomainPadding(nn.Module):
             return F.pad(x, padding, mode='constant')
 
         except KeyError:
-            padding = [int(round(p*r)) for (p, r) in zip(self.domain_padding, resolution)]
+            padding = [int(round(p * r)) for (p, r)
+                       in zip(self.domain_padding, resolution)]
             
-            print(f'Padding inputs of {resolution=} with {padding=}, {self.padding_mode}')
+            print(f'Padding inputs of resolution={resolution} ' +
+                  f'with padding={padding}, {self.padding_mode}')
             
             
             output_pad = padding
@@ -75,7 +77,7 @@ class DomainPadding(nn.Module):
                 unpad_indices = (Ellipsis, ) + tuple([slice(None, -p, None) for p in output_pad[::-1]])
                 padding = [i for p in padding for i in (0, p)]
             else:
-                raise ValueError(f'Got {self.padding_mode=}')
+                raise ValueError(f'Got padding_mode={self.padding_mode}')
             
             self._padding[f'{resolution}'] = padding
             

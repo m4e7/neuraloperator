@@ -178,7 +178,8 @@ def get_contract_fun(weight, implementation='reconstructed', separable=False):
                 f'Got unexpected weight type of class {weight.__class__.__name__}')
     else:
         raise ValueError(
-            f'Got {implementation=}, expected "reconstructed" or "factorized"')
+            f'Got implementation={implementation}, ' +
+            f'expected "reconstructed" or "factorized"')
 
 
 class SphericalConv(nn.Module):
@@ -260,8 +261,9 @@ class SphericalConv(nn.Module):
         if separable:
             if in_channels != out_channels:
                 raise ValueError(
-                    'To use separable Fourier Conv, in_channels must be equal to out_channels, ',
-                    f'but got {in_channels=} and {out_channels=}')
+                    'To use separable Fourier Conv, '
+                    'in_channels must be equal to out_channels, but got '
+                    f'in_channels={in_channels}, out_channels={out_channels}')
             weight_shape = (in_channels, *half_total_n_modes[:-1])
         else:
             weight_shape = (in_channels, out_channels,
