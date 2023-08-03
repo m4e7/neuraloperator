@@ -1,7 +1,7 @@
 from .burgers import load_burgers
 from .darcy import load_darcy_pt, load_darcy_flow_small
 from .spherical_swe import load_spherical_swe
-from .navier_stokes import load_navier_stokes_pt
+from .navier_stokes import load_navier_stokes_pt, load_navier_stokes_temporal_pt
 # from .navier_stokes import load_navier_stokes_zarr
 # from .navier_stokes import load_navier_stokes_hdf5
 

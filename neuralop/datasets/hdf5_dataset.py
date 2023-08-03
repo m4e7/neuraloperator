@@ -1,6 +1,11 @@
+from typing import Optional
+
 import h5py
 import torch
 from torch.utils.data import Dataset
+from torchvision import transforms
+
+from .transforms import Normalizer, PositionalEmbedding
 
 
 class H5pyDataset(Dataset):
@@ -24,6 +29,10 @@ class H5pyDataset(Dataset):
         self.subsample_step = subsample_step
         self.data_path = data_path
         self._data = None
+        self._x_mean: Optional[float] = None
+        self._x_std: Optional[float] = None
+        self._y_mean: Optional[float] = None
+        self._y_std: Optional[float] = None
         self.transform_x = transform_x
         self.transform_y = transform_y
 
@@ -41,6 +50,30 @@ class H5pyDataset(Dataset):
 
     def _attribute(self, variable, name):
         return self.data[variable].attrs[name]
+
+    @property
+    def x_mean(self):
+        if self._x_mean is None:
+            self._x_mean = self._attribute('x', 'mean')
+        return self._x_mean
+
+    @property
+    def x_std(self):
+        if self._x_std is None:
+            self._x_std = self._attribute('x', 'std')
+        return self._x_std
+
+    @property
+    def y_mean(self):
+        if self._y_mean is None:
+            self._y_mean = self._attribute('y', 'mean')
+        return self._y_mean
+
+    @property
+    def y_std(self):
+        if self._y_std is None:
+            self._y_std = self._attribute('y', 'std')
+        return self._y_std
 
     def __len__(self):
         return self.n_samples
@@ -71,3 +104,25 @@ class H5pyDataset(Dataset):
             y = self.transform_y(y)
 
         return {'x': x, 'y': y}
+
+    def generate_transforms(
+        self,
+        encode_input,
+        positional_encoding,
+        encode_output,
+        grid_boundaries=((0, 1), (0, 1)),
+    ):
+        transform_x = []
+        transform_y = None
+
+        if encode_input:
+            transform_x.append(Normalizer(self.x_mean, self.x_std))
+
+        if positional_encoding:
+            transform_x.append(PositionalEmbedding(grid_boundaries, 0))
+
+        if encode_output:
+            transform_y = Normalizer(self.y_mean, self.y_std)
+
+        self.transform_x = transforms.Compose(transform_x)
+        self.transform_y = transform_y
