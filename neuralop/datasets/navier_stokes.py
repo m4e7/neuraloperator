@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional, Tuple
 try:
     from typing import Literal
@@ -6,14 +7,12 @@ except ImportError:
 
 import torch
 from torch.utils.data import DataLoader
-from pathlib import Path
-from torchvision import transforms
 
 from ..utils import UnitGaussianNormalizer
 from .hdf5_dataset import H5pyDataset
 from .zarr_dataset import ZarrDataset
 from .tensor_dataset import TensorDataset
-from .transforms import Normalizer, PositionalEmbedding
+from .transforms import PositionalEmbedding
 
 
 def load_navier_stokes_zarr(
@@ -38,26 +37,8 @@ def load_navier_stokes_zarr(
         data_path / 'navier_stokes_1024_train.zarr',
         n_samples=n_train,
         resolution=train_resolution)
-    transform_x = []
-    transform_y = None
-
-    if encode_input:
-        x_mean = training_db.attrs('x', 'mean')
-        x_std = training_db.attrs('x', 'std')
-
-        transform_x.append(Normalizer(x_mean, x_std))
-
-    if positional_encoding:
-        transform_x.append(PositionalEmbedding(grid_boundaries, 0))
-
-    if encode_output:
-        y_mean = training_db.attrs('y', 'mean')
-        y_std = training_db.attrs('y', 'std')
-
-        transform_y = Normalizer(y_mean, y_std)
-
-    training_db.transform_x = transforms.Compose(transform_x)
-    training_db.transform_y = transform_y
+    training_db.generate_transforms(
+        encode_input, positional_encoding, encode_output, grid_boundaries)
 
     train_loader = torch.utils.data.DataLoader(
         training_db,
@@ -69,33 +50,18 @@ def load_navier_stokes_zarr(
         persistent_workers=persistent_workers)
 
     test_loaders = dict()
-    for (
-            res,
-            n_test,
-            test_batch_size) in zip(
-            test_resolutions,
-            n_tests,
-            test_batch_sizes):
+    for (res, n_test, test_batch_size)\
+            in zip(test_resolutions, n_tests, test_batch_sizes):
         print(
             f'Loading test db at resolution {res} with {n_test} samples and ' +
             f'batch-size={test_batch_size}')
-        transform_x = []
-        transform_y = None
-        if encode_input:
-            transform_x.append(Normalizer(x_mean, x_std))
-        if positional_encoding:
-            transform_x.append(PositionalEmbedding(grid_boundaries, 0))
-
-        if encode_output:
-            transform_y = Normalizer(y_mean, y_std)
-
         test_db = ZarrDataset(
             data_path /
             'navier_stokes_1024_test.zarr',
             n_samples=n_test,
             resolution=res,
-            transform_x=transforms.Compose(transform_x),
-            transform_y=transform_y)
+            transform_x=training_db.transform_x,
+            transform_y=training_db.transform_y)
 
         test_loaders[res] = torch.utils.data.DataLoader(
             test_db,
@@ -105,7 +71,7 @@ def load_navier_stokes_zarr(
             pin_memory=pin_memory,
             persistent_workers=persistent_workers)
 
-    return train_loader, test_loaders, transform_y
+    return train_loader, test_loaders, training_db.transform_y
 
 
 def load_navier_stokes_hdf5(
@@ -130,26 +96,8 @@ def load_navier_stokes_hdf5(
         data_path / 'navier_stokes_1024_train.hdf5',
         n_samples=n_train,
         resolution=train_resolution)
-    transform_x = []
-    transform_y = None
-
-    if encode_input:
-        x_mean = training_db._attribute('x', 'mean')
-        x_std = training_db._attribute('x', 'std')
-
-        transform_x.append(Normalizer(x_mean, x_std))
-
-    if positional_encoding:
-        transform_x.append(PositionalEmbedding(grid_boundaries, 0))
-
-    if encode_output:
-        y_mean = training_db._attribute('y', 'mean')
-        y_std = training_db._attribute('y', 'std')
-
-        transform_y = Normalizer(y_mean, y_std)
-
-    training_db.transform_x = transforms.Compose(transform_x)
-    training_db.transform_y = transform_y
+    training_db.generate_transforms(
+        encode_input, positional_encoding, encode_output, grid_boundaries)
 
     train_loader = torch.utils.data.DataLoader(
         training_db,
@@ -165,22 +113,13 @@ def load_navier_stokes_hdf5(
         print(
             f'Loading test db at resolution {res} with {n_test} samples and ' +
             f'batch-size={test_batch_size}')
-        transform_x = []
-        transform_y = None
-        if encode_input:
-            transform_x.append(Normalizer(x_mean, x_std))
-        if positional_encoding:
-            transform_x.append(PositionalEmbedding(grid_boundaries, 0))
-
-        if encode_output:
-            transform_y = Normalizer(y_mean, y_std)
 
         test_db = H5pyDataset(
             data_path / 'navier_stokes_1024_test.hdf5',
             n_samples=n_test,
             resolution=res,
-            transform_x=transforms.Compose(transform_x),
-            transform_y=transform_y)
+            transform_x=training_db.transform_x,
+            transform_y=training_db.transform_y)
 
         test_loaders[res] = torch.utils.data.DataLoader(
             test_db,
@@ -190,7 +129,7 @@ def load_navier_stokes_hdf5(
             pin_memory=pin_memory,
             persistent_workers=persistent_workers)
 
-    return train_loader, test_loaders, transform_y
+    return train_loader, test_loaders, training_db.transform_y
 
 
 EncodingEnum = Literal['channel-wise', 'pixel-wise']
@@ -425,27 +364,27 @@ def load_navier_stokes_temporal_pt(
                                       :history_length,
                                       ::downsampling_rate,
                                       ::downsampling_rate]\
-        .unsqueeze(channel_dim)\
         .clone()
+        # .unsqueeze(channel_dim)\
     y_train: torch.Tensor = data['u'][:n_train,
                                       history_length:future_end,
                                       ::downsampling_rate,
                                       ::downsampling_rate]\
-        .unsqueeze(channel_dim)\
         .clone()
+        # .unsqueeze(channel_dim)\
 
     x_test: torch.Tensor = data['u'][-n_test:,
                                      :history_length,
                                      ::downsampling_rate,
                                      ::downsampling_rate]\
-        .unsqueeze(channel_dim)\
         .clone()
+        # .unsqueeze(channel_dim)\
     y_test: torch.Tensor = data['u'][-n_test:,
                                      history_length:future_end,
                                      ::downsampling_rate,
                                      ::downsampling_rate]\
-        .unsqueeze(channel_dim)\
         .clone()
+        # .unsqueeze(channel_dim)\
 
     if encode_input:
         input_encoder = _make_encoder(x_train, encoding)
