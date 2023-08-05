@@ -7,12 +7,13 @@ except ImportError:
 
 import torch
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from ..utils import UnitGaussianNormalizer
 from .hdf5_dataset import H5pyDataset
 from .zarr_dataset import ZarrDataset
 from .tensor_dataset import TensorDataset
-from .transforms import PositionalEmbedding
+from .transforms import PositionalEmbedding, FutureEmbedding
 
 
 def load_navier_stokes_zarr(
@@ -308,10 +309,10 @@ def load_navier_stokes_temporal_pt(
     downsampling_rate: int = 1,
     grid_boundaries=((0, 1), (0, 1)),
     positional_encoding: bool = True,
+    future_encoding: bool = False,
     encode_input: bool = True,
     encode_output: bool = True,
     encoding: EncodingEnum = 'channel-wise',
-    channel_dim=1,
     num_workers=2,
     pin_memory: bool = True,
     persistent_workers: bool = True
@@ -357,34 +358,47 @@ def load_navier_stokes_temporal_pt(
         Step size to be used in x, y dimensions for training and testing data.
         A rate of 1 will use 100% of the given data (i.e. no downsampling),
         a rate of 4 will use 25% of data, etc.
+    positional_encoding : bool, optional; defaults to ``True``
+        Whether to add positional encoding the x_train and x_test data.
+        Uses ``transforms.PositionalEmbedding``.
+    grid_boundaries : Tuple[Tuple[int, int], Tuple[int, int]], optional
+        By default is the unit square (i.e. ``((0, 1), (0, 1))``). Describes
+        the lower (inclusive) and upper (exclusive) bounds to be used if
+        ``positional_encoding==True``.
+    future_encoding : bool, optional; defaults to ``False``
+        Whether to add "future" encoding the x_train and x_test data using
+        sequential integers ``[1 .. future_duration]``.
+        Uses ``transforms.FutureEmbedding``.
+    encode_input : bool, optional; defaults to ``True``
+        Whether to normalize the input x_train, x_test using a Gaussian.
+    encode_output : bool, optional; defaults to ``True``
+        Whether to normalize the output y_train using a Gaussian.
     """
     future_end = history_length + future_duration
     data = torch.load(data_path)
-    x_train: torch.Tensor = data['u'][:n_train,
-                                      :history_length,
-                                      ::downsampling_rate,
-                                      ::downsampling_rate]\
-        .clone()
-        # .unsqueeze(channel_dim)\
-    y_train: torch.Tensor = data['u'][:n_train,
-                                      history_length:future_end,
-                                      ::downsampling_rate,
-                                      ::downsampling_rate]\
-        .clone()
-        # .unsqueeze(channel_dim)\
+    x_train_slice = (slice(n_train),  # Equivalent to:       [:n_train,
+                     slice(history_length),  #                :history_length,
+                     slice(None, None, downsampling_rate),  # ::sampling_rate,
+                     slice(None, None, downsampling_rate))  # ::sampling_rate]
+    x_train: torch.Tensor = data['u'][x_train_slice].clone()
 
-    x_test: torch.Tensor = data['u'][-n_test:,
-                                     :history_length,
-                                     ::downsampling_rate,
-                                     ::downsampling_rate]\
-        .clone()
-        # .unsqueeze(channel_dim)\
-    y_test: torch.Tensor = data['u'][-n_test:,
-                                     history_length:future_end,
-                                     ::downsampling_rate,
-                                     ::downsampling_rate]\
-        .clone()
-        # .unsqueeze(channel_dim)\
+    y_train_slice = (slice(n_train),  # Equivalent to:       [:n_train,
+                     slice(history_length, future_end),  #    history:future,
+                     slice(None, None, downsampling_rate),  # ::sampling_rate,
+                     slice(None, None, downsampling_rate))  # ::sampling_rate]
+    y_train: torch.Tensor = data['u'][y_train_slice].clone()
+
+    x_test_slice = (slice(-n_test, None),  # Equivalent to: [-n_test:,
+                    slice(history_length),  #                :history_length,
+                    slice(None, None, downsampling_rate),  # ::sampling_rate,
+                    slice(None, None, downsampling_rate))  # ::sampling_rate]
+    x_test: torch.Tensor = data['u'][x_test_slice].clone()
+
+    y_test_slice = (slice(-n_test, None),  # Equivalent to: [-n_test:,
+                    slice(history_length, future_end),  #    history:future,
+                    slice(None, None, downsampling_rate),  # ::sampling_rate,
+                    slice(None, None, downsampling_rate))  # ::sampling_rate]
+    y_test: torch.Tensor = data['u'][y_test_slice].clone()
 
     if encode_input:
         input_encoder = _make_encoder(x_train, encoding)
@@ -397,12 +411,18 @@ def load_navier_stokes_temporal_pt(
     else:
         output_encoder = None
 
+    train_transform_x = transforms.Compose([
+        PositionalEmbedding(grid_boundaries, 0)
+        if positional_encoding
+        else None,
+        FutureEmbedding(future_duration, 1)
+        if future_encoding
+        else None
+    ])
     train_set = TensorDataset(
         x_train,
         y_train,
-        transform_x=(PositionalEmbedding(grid_boundaries, 0)
-                     if positional_encoding
-                     else None))
+        transform_x=train_transform_x)
     train_loader = DataLoader(
         train_set,
         batch_size=train_batch_size,
@@ -412,12 +432,18 @@ def load_navier_stokes_temporal_pt(
         pin_memory=pin_memory,
         persistent_workers=persistent_workers)
 
+    test_transform_x = transforms.Compose([
+        PositionalEmbedding(grid_boundaries, 0)
+        if positional_encoding
+        else None,
+        FutureEmbedding(future_duration, 1)
+        if future_encoding
+        else None
+    ])
     test_set = TensorDataset(
         x_test,
         y_test,
-        transform_x=(PositionalEmbedding(grid_boundaries, 0)
-                     if positional_encoding
-                     else None))
+        transform_x=test_transform_x)
     test_loader = DataLoader(
         test_set,
         batch_size=test_batch_size,
@@ -444,4 +470,6 @@ def _make_encoder(
 
     return UnitGaussianNormalizer(
         target_tensor,
-        reduce_dim=reduce_dims)
+        reduce_dim=reduce_dims,
+        verbose=False,
+    )
