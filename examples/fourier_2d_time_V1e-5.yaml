@@ -1,12 +1,12 @@
-data_path: /home/mogab/code/dev/neuraloperator/data/ns_V1e-4_N10_000_T30.pth
-n_train: 2000
-n_test: 500
-train_batch_size: 50
-test_batch_size: 20
+data_path: /home/mogab/code/dev/neuraloperator/data/ns_V1e-5_N1_200_T20.pth
+n_train: 1000
+n_test: 200
+train_batch_size: 20
+test_batch_size: 10
 learning_rate: 0.001
 epochs: 500
 # Should be: iterations = epochs * (n_train // train_batch_size)
-iterations: 20_000
+iterations: 25_000
 modes: 12
 width: 20
 subsampling_rate: 1
@@ -16,5 +16,5 @@ history_length: 10
 # # future=40 for V1e-3
 # # future=20 for V1e-4
 # # future=10 for V1e-5;
-future_duration: 20
+future_duration: 10
 step: 1
