@@ -415,7 +415,7 @@ def load_navier_stokes_temporal_pt(
         PositionalEmbedding(grid_boundaries, 0)
         if positional_encoding
         else None,
-        FutureEmbedding(future_duration, 1)
+        FutureEmbedding(future_duration, 0)
         if future_encoding
         else None
     ])
@@ -436,7 +436,7 @@ def load_navier_stokes_temporal_pt(
         PositionalEmbedding(grid_boundaries, 0)
         if positional_encoding
         else None,
-        FutureEmbedding(future_duration, 1)
+        FutureEmbedding(future_duration, 0)
         if future_encoding
         else None
     ])

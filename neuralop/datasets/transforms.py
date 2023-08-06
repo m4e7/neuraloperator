@@ -44,19 +44,19 @@ class FutureEmbedding:
 
     def __call__(self, data: torch.Tensor):
         """
-        Input shape: (batch_length, channel_length, x, y)
-        Output shape: (batch_length, future_duration, channel_length + 1, x, y)
+        Input shape: (channel_length, x, y)
+        Output shape: (channel_length + 1, future_duration, x, y)
         """
-        sn, sc, sx, sy = data.shape
-        data = torch.unsqueeze(data, 1)\
-                    .expand((sn, self.future_duration, sc, sx, sy))
+        sc, sx, sy = data.shape
+        data = torch.unsqueeze(data, self.channel_dim + 1)\
+                    .expand((sc, self.future_duration, sx, sy))
         data = torch.cat(
             [data,
-             torch.zeros((sn, self.future_duration, 1, sx, sy))],
-            dim=self.channel_dim + 1
+             torch.zeros((1, self.future_duration, sx, sy))],
+            dim=self.channel_dim
         )
         for t in range(self.future_duration):
-            data[:, t, -1, :, :] = torch.full((sn, sx, sy), t + 1)
+            data[-1, t, :, :] = torch.full((sx, sy), t + 1)
         return data
 
 
