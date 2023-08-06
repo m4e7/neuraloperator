@@ -3,7 +3,7 @@ from .positional_encoding import get_grid_positional_encoding
 from torch.utils.data import Dataset
 
 
-class Normalizer():
+class Normalizer:
     def __init__(self, mean, std, eps=1e-6):
         self.mean = mean
         self.std = std
@@ -13,10 +13,10 @@ class Normalizer():
             self.eps = eps
 
     def __call__(self, data):
-        return (data - self.mean)/(self.std + self.eps)
+        return (data - self.mean) / (self.std + self.eps)
 
 
-class PositionalEmbedding():
+class PositionalEmbedding:
     def __init__(self, grid_boundaries, channel_dim):
         self.grid_boundaries = grid_boundaries
         self.channel_dim = channel_dim
@@ -24,19 +24,43 @@ class PositionalEmbedding():
 
     def grid(self, data):
         if self._grid is None:
-            self._grid = get_grid_positional_encoding(data, 
-                                                      grid_boundaries=self.grid_boundaries,
-                                                      channel_dim=self.channel_dim)
+            self._grid = get_grid_positional_encoding(
+                data,
+                grid_boundaries=self.grid_boundaries,
+                channel_dim=self.channel_dim)
         return self._grid
 
     def __call__(self, data):
         x, y = self.grid(data)
         x, y = x.squeeze(self.channel_dim), y.squeeze(self.channel_dim)
-        
+
         return torch.cat((data, x, y), dim=0)
 
 
-class RandomMGPatch():
+class FutureEmbedding:
+    def __init__(self, future_duration: int, channel_dim: int):
+        self.future_duration = future_duration
+        self.channel_dim = channel_dim
+
+    def __call__(self, data: torch.Tensor):
+        """
+        Input shape: (channel_length, x, y)
+        Output shape: (channel_length + 1, future_duration, x, y)
+        """
+        sc, sx, sy = data.shape
+        data = torch.unsqueeze(data, self.channel_dim + 1)\
+                    .expand((sc, self.future_duration, sx, sy))
+        data = torch.cat(
+            [data,
+             torch.zeros((1, self.future_duration, sx, sy))],
+            dim=self.channel_dim
+        )
+        for t in range(self.future_duration):
+            data[-1, t, :, :] = torch.full((sx, sy), t + 1)
+        return data
+
+
+class RandomMGPatch:
     def __init__(self, levels=2):
         self.levels = levels
         self.step = 2**levels
@@ -44,26 +68,34 @@ class RandomMGPatch():
     def __call__(self, data):
 
         def _get_patches(shifted_image, step, height, width):
-            """Take as input an image and return multi-grid patches centered around the middle of the image
+            """
+            Take as input an image and return multi-grid patches
+            centered around the middle of the image
             """
             if step == 1:
                 return (shifted_image, )
             else:
-                # Notice that we need to stat cropping at start_h = (height - patch_size)//2
-                # (//2 as we pad both sides)
-                # Here, the extracted patch-size is half the size so patch-size = height//2
-                # Hence the values height//4 and width // 4
-                start_h = height//4
-                start_w = width//4
+                # Notice that we need to stat cropping at:
+                # ``start_h = (height - patch_size) // 2``
+                # ( // 2 as we pad both sides)
+                # Here, the extracted patch-size is half the size so:
+                # ``patch-size = height // 2``
+                # Hence the values height // 4 and width // 4
+                start_h = height // 4
+                start_w = width // 4
 
-                patches = _get_patches(shifted_image[:, start_h:-start_h, start_w:-start_w], step//2, height//2, width//2)
+                patches = _get_patches(
+                    shifted_image[:, start_h:-start_h, start_w:-start_w],
+                    step // 2,
+                    height // 2,
+                    width // 2)
 
                 return (shifted_image[:, ::step, ::step], *patches)
-        
+
         x, y = data
         channels, height, width = x.shape
-        center_h = height//2
-        center_w = width//2
+        center_h = height // 2
+        center_w = width // 2
 
         # Sample a random patching position
         pos_h = torch.randint(low=0, high=height, size=(1,))[0]
@@ -78,6 +110,7 @@ class RandomMGPatch():
         patches_y = _get_patches(shifted_y, self.step, height, width)
 
         return torch.cat(patches_x, dim=0), patches_y[-1]
+
 
 class MGPTensorDataset(Dataset):
     def __init__(self, x, y, levels=2):

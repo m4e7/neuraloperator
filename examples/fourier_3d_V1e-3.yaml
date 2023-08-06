@@ -1,0 +1,20 @@
+data_path: /home/mogab/code/dev/neuraloperator/data/ns_V1e-3_N5_000_T50.pth
+n_train: 1000
+n_test: 200
+train_batch_size: 10
+test_batch_size: 10
+learning_rate: 0.001
+epochs: 500
+# Should be: iterations = epochs * (n_train // train_batch_size)
+iterations: 25_000
+modes: 8
+width: 20
+subsampling_rate: 1
+# Should be: s = 64 // subsampling_rate
+s: 64
+history_length: 10
+# Expect:
+# # future=40 for V1e-3
+# # future=20 for V1e-4
+# # future=10 for V1e-5;
+future_duration: 40
